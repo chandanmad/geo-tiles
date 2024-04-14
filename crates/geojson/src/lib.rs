@@ -3,7 +3,7 @@ extern crate serde_derive;
 extern crate serde;
 
 use serde_json as json;
-use std::str::FromStr;
+use std::{fmt::Display, str::FromStr};
 
 pub type Coordinate = (f64, f64);
 
@@ -21,7 +21,7 @@ impl LatLng for Coordinate {
     }
 }
 
-pub type Properties = json::Value;
+pub type Properties = json::Map<String, json::Value>;
 
 pub trait Value {
     fn value<T>(&self, name: &str) -> Option<T>
@@ -34,11 +34,8 @@ impl Value for Properties {
     where
         for<'de> T: serde::Deserialize<'de>,
     {
-        match self {
-            json::Value::Object(ref map) => match map.get(name) {
-                Some(value) => json::from_value::<T>(value.clone()).ok(),
-                _ => None,
-            },
+        match self.get(name) {
+            Some(value) => json::from_value::<T>(value.clone()).ok(),
             _ => None,
         }
     }
@@ -193,15 +190,24 @@ mod tests {
             "type": "Polygon"
         },
             "properties": {
-            "FID": 588419
+            "FID" : 588419
         },
             "type": "Feature"
         }"##;
         let actual: GeoJson = json_str.parse::<GeoJson>().unwrap();
 
+        if let GeoJson::Feature(Feature {
+            id: _,
+            ref properties,
+            geometry: _,
+        }) = actual
+        {
+            let fid = properties.value::<i32>("FID");
+            assert_eq!(Some(588419), fid);
+        }
+
         let mut prop = serde_json::Map::new();
         prop.insert("FID".to_owned(), json::Value::Number(Number::from(588419)));
-        let prop = json::Value::Object(prop);
 
         let expected = GeoJson::Feature(Feature {
             id: Some(588419),
@@ -214,7 +220,7 @@ mod tests {
                     (77.35, 12.75),
                 ]],
             }),
-            properties: (prop),
+            properties: prop,
         });
 
         assert_eq!(expected, actual);
@@ -271,7 +277,7 @@ mod tests {
                     (77.52530670166016, 12.988258361816406),
                 ],
             }),
-            properties: json::Value::Object(prop),
+            properties: prop,
         });
         assert_eq!(expected, actual);
     }
@@ -303,7 +309,7 @@ mod tests {
             geometry: Geometry::Point(Point {
                 coordinates: (102.0, 0.5),
             }),
-            properties: json::Value::Object(prop),
+            properties: prop,
         });
 
         assert_eq!(expected, actual);
@@ -315,7 +321,33 @@ mod tests {
         {
             "type": "jadlf"
         }"##;
-
         assert_eq!(true, json_str.parse::<GeoJson>().is_err());
+    }
+
+    #[test]
+    fn test_properties_value_get() {
+        let map_json = serde_json::Map::from_iter([(
+            "hello".to_string(),
+            json::Value::Object(json::Map::from_iter([
+                ("name".to_string(), json::Value::String("John".to_string())),
+                (
+                    "surname".to_string(),
+                    json::Value::String("Doe".to_string()),
+                ),
+            ])),
+        )]);
+        let prop: Properties = map_json;
+
+        let actual = prop.value::<json::Value>("hello");
+        assert_eq!(
+            Some(json::Value::Object(json::Map::from_iter([
+                ("name".to_string(), json::Value::String("John".to_string())),
+                (
+                    "surname".to_string(),
+                    json::Value::String("Doe".to_string())
+                )
+            ]))),
+            actual
+        );
     }
 }
