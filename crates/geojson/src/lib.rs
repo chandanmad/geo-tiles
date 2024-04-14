@@ -3,7 +3,7 @@ extern crate serde_derive;
 extern crate serde;
 
 use serde_json as json;
-use std::{fmt::Display, str::FromStr};
+use std::str::FromStr;
 
 pub type Coordinate = (f64, f64);
 
